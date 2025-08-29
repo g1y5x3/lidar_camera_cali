@@ -9,7 +9,7 @@
 #include "opencv2/opencv.hpp"
 
 #include <pcl_conversions/pcl_conversions.h>
-#include <pcl/point_cloud.h>
+#include <pcl/ModelCoefficients.h>
 #include <pcl/point_types.h>
 #include <pcl/sample_consensus/method_types.h>
 #include <pcl/sample_consensus/model_types.h>
@@ -36,7 +36,7 @@ public:
             "/spot/lidar/points", 10, std::bind(&LiDARCamCalibration::lidar_callback, this, std::placeholders::_1));
 
         // // FOR DEBUGGING: Publisher for filtered point cloud
-        // filtered_cloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/lidar/filtered_points", 10);
+        filtered_cloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/lidar/filtered_points", 10);
         
         RCLCPP_INFO(this->get_logger(), "Node started. Subscribing to camera and lidar topics.");
 
@@ -117,16 +117,36 @@ private:
         pass.setFilterLimits(-2.0, 2.0);
         pass.filter(*cloud_filtered);
 
-        // // FOR DEBUGGING: Publish the filtered point cloud
-        // sensor_msgs::msg::PointCloud2 filtered_msg;
-        // pcl::toROSMsg(*cloud_filtered, filtered_msg);
-        // filtered_msg.header = msg->header; // Preserve the original header (frame_id and timestamp)
-        // filtered_cloud_publisher_->publish(filtered_msg);
-
         if (cloud_filtered->points.size() < 10) { // Need a few points to find a plane
             RCLCPP_WARN(this->get_logger(), "Not enough points after filtering.");
             return;
         }
+
+        // pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
+        // pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
+        // // Create the segmentation object
+        // pcl::SACSegmentation<pcl::PointXYZ> seg;
+        // // Optional
+        // seg.setOptimizeCoefficients (true);
+        // // Mandatory
+        // seg.setModelType (pcl::SACMODEL_PLANE);
+        // seg.setMethodType (pcl::SAC_RANSAC);
+        // seg.setDistanceThreshold (0.01);
+
+        // seg.setInputCloud (cloud);
+        // seg.segment (*inliers, *coefficients);
+
+        // if (inliers->indices.size () == 0)
+        // {
+        //   PCL_ERROR ("Could not estimate a planar model for the given dataset.\n");
+        //   return (-1);
+        // }
+
+        // FOR DEBUGGING: Publish the filtered point cloud
+        sensor_msgs::msg::PointCloud2 filtered_msg;
+        pcl::toROSMsg(*cloud_filtered, filtered_msg);
+        filtered_msg.header = msg->header; // Preserve the original header (frame_id and timestamp)
+        filtered_cloud_publisher_->publish(filtered_msg);
     }
 
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr subscription_;
