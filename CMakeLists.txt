@@ -12,29 +12,33 @@ find_package(sensor_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(apriltag REQUIRED)
+find_package(pcl_conversions REQUIRED)
+find_package(PCL REQUIRED)
 
 add_executable(lidar_camera_cali_node src/lidar_camera_cali.cpp)
 
 target_include_directories(lidar_camera_cali_node PUBLIC
   ${apriltag_INCLUDE_DIRS}
+  ${PCL_INCLUDE_DIRS}
 )
 
 ament_target_dependencies(lidar_camera_cali_node
   rclcpp
   sensor_msgs
   cv_bridge
+  pcl_conversions
 )
 
 target_link_libraries(lidar_camera_cali_node
   ${OpenCV_LIBRARIES}
   ${apriltag_LIBRARIES}
+  ${PCL_LIBRARIES}
 )
 
 install(TARGETS
   lidar_camera_cali_node
   DESTINATION lib/${PROJECT_NAME}
 )
-
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

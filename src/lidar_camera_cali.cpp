@@ -7,8 +7,14 @@
 
 #include "cv_bridge/cv_bridge.h"
 #include "opencv2/opencv.hpp"
-#include "opencv2/highgui.hpp" // Required for cv::imshow
 
+#include <pcl_conversions/pcl_conversions.h>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/filters/passthrough.h>
 
 extern "C" {
 #include "apriltag.h"
@@ -27,7 +33,10 @@ public:
             "/spot/camera/frontright_fisheye/image_raw", 10, std::bind(&LiDARCamCalibration::image_callback, this, std::placeholders::_1));
 
         lidar_subscription_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
-            "/spot/lidar/points", 10, std::bind(&AprilTagDetector::lidar_callback, this, std::placeholders::_1));
+            "/spot/lidar/points", 10, std::bind(&LiDARCamCalibration::lidar_callback, this, std::placeholders::_1));
+
+        // // FOR DEBUGGING: Publisher for filtered point cloud
+        // filtered_cloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/lidar/filtered_points", 10);
         
         RCLCPP_INFO(this->get_logger(), "Node started. Subscribing to camera and lidar topics.");
 
@@ -59,11 +68,6 @@ private:
             return;
         }
 
-        // cv::Mat rotated_image;
-        // cv::rotate(cv_ptr->image, rotated_image, cv::ROTATE_90_COUNTERCLOCKWISE);
-        // cv::imshow("Rotated Camera Image", rotated_image);
-        // cv::waitKey(1); // Required to display the image
-
         // Convert the color image to grayscale
         cv::Mat gray;
         cv::cvtColor(cv_ptr->image, gray, cv::COLOR_BGR2GRAY);
@@ -93,7 +97,41 @@ private:
         apriltag_detections_destroy(detections);
     }
 
+    void lidar_callback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
+    {
+        // Convert ROS message to PCL point cloud
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+        pcl::fromROSMsg(*msg, *cloud);
+
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZ>);
+        pcl::PassThrough<pcl::PointXYZ> pass;
+
+        // Keep points from 0.1m to 4m in front of the sensor (X-axis)
+        pass.setInputCloud(cloud);
+        pass.setFilterFieldName("x");
+        pass.setFilterLimits(0.1, 4.0);
+        pass.filter(*cloud_filtered);
+
+        pass.setInputCloud(cloud_filtered);
+        pass.setFilterFieldName("y");
+        pass.setFilterLimits(-2.0, 2.0);
+        pass.filter(*cloud_filtered);
+
+        // // FOR DEBUGGING: Publish the filtered point cloud
+        // sensor_msgs::msg::PointCloud2 filtered_msg;
+        // pcl::toROSMsg(*cloud_filtered, filtered_msg);
+        // filtered_msg.header = msg->header; // Preserve the original header (frame_id and timestamp)
+        // filtered_cloud_publisher_->publish(filtered_msg);
+
+        if (cloud_filtered->points.size() < 10) { // Need a few points to find a plane
+            RCLCPP_WARN(this->get_logger(), "Not enough points after filtering.");
+            return;
+        }
+    }
+
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr subscription_;
+    rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr lidar_subscription_;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr filtered_cloud_publisher_; // Publisher declaration
     apriltag_family_t *tf_;
     apriltag_detector_t *td_;
 };
