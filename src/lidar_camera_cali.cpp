@@ -31,7 +31,7 @@ public:
     {
         // Create a subscription to the front-left fisheye camera image topic
         subscription_ = this->create_subscription<sensor_msgs::msg::Image>(
-            "/spot/camera/frontright_fisheye/image_raw", 10, std::bind(&LiDARCamCalibration::image_callback, this, std::placeholders::_1));
+            "/spot/camera/frontleft_fisheye/image_raw", 10, std::bind(&LiDARCamCalibration::image_callback, this, std::placeholders::_1));
 
         lidar_subscription_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
             "/spot/lidar/points", 10, std::bind(&LiDARCamCalibration::lidar_callback, this, std::placeholders::_1));
