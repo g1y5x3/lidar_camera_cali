@@ -15,6 +15,7 @@
 #include <pcl/sample_consensus/model_types.h>
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/filters/passthrough.h>
+#include <pcl/filters/extract_indices.h>
 
 extern "C" {
 #include "apriltag.h"
@@ -122,29 +123,37 @@ private:
             return;
         }
 
-        // pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
-        // pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
-        // // Create the segmentation object
-        // pcl::SACSegmentation<pcl::PointXYZ> seg;
-        // // Optional
-        // seg.setOptimizeCoefficients (true);
-        // // Mandatory
-        // seg.setModelType (pcl::SACMODEL_PLANE);
-        // seg.setMethodType (pcl::SAC_RANSAC);
-        // seg.setDistanceThreshold (0.01);
+        // Create the segmentation object for the planar model
+        pcl::SACSegmentation<pcl::PointXYZ> seg;
+        pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
+        pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
 
-        // seg.setInputCloud (cloud);
-        // seg.segment (*inliers, *coefficients);
+        seg.setOptimizeCoefficients(true);      // Optional: Refine the model coefficients using all inliers
+        seg.setModelType(pcl::SACMODEL_PLANE);  // The model to search for is a plane
+        seg.setMethodType(pcl::SAC_RANSAC);     // The method to use is RANSAC
+        seg.setMaxIterations(1000);             // Maximum number of iterations
+        seg.setDistanceThreshold(0.004);         // Inlier distance threshold (e.g., 1 cm)
+        seg.setInputCloud(cloud_filtered);
+        seg.segment(*inliers, *coefficients);
 
-        // if (inliers->indices.size () == 0)
-        // {
-        //   PCL_ERROR ("Could not estimate a planar model for the given dataset.\n");
-        //   return (-1);
-        // }
+        if (inliers->indices.size() == 0)
+        {
+            RCLCPP_ERROR(this->get_logger(), "Could not estimate a planar model for the given dataset.");
+            return;
+        }
+
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_plane(new pcl::PointCloud<pcl::PointXYZ>());
+        pcl::ExtractIndices<pcl::PointXYZ> extract;
+        extract.setInputCloud(cloud_filtered);
+        extract.setIndices(inliers);
+        extract.setNegative(false); // Set to 'false' to extract the inliers
+        extract.filter(*cloud_plane);
+
+        RCLCPP_INFO(this->get_logger(), "Extracted %zu points for the plane.", cloud_plane->points.size());
 
         // FOR DEBUGGING: Publish the filtered point cloud
         sensor_msgs::msg::PointCloud2 filtered_msg;
-        pcl::toROSMsg(*cloud_filtered, filtered_msg);
+        pcl::toROSMsg(*cloud_plane, filtered_msg);
         filtered_msg.header = msg->header; // Preserve the original header (frame_id and timestamp)
         filtered_cloud_publisher_->publish(filtered_msg);
     }
